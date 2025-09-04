@@ -1,6 +1,6 @@
 import win32com.client
 import os
-from fast_diff_match_patch import diff
+import difflib
 
 INSERTION_TYPE = 1
 DELETION_TYPE = 2
@@ -77,10 +77,7 @@ def handle_tags(doc, addition, bold_open, underline_open, italicize_open, highli
             if addition[i:i + CLOSE_TAG_LENGTH] in TAGS:
                 tag = addition[i:i + CLOSE_TAG_LENGTH]
                 if tag == '<\\b>' and bold_open:
-                    start = bold_open.pop()
-                    end = i + curr_index - count
-                    print(start, end)
-                    style_range = doc.Range(Start=start, End=end)
+                    style_range = doc.Range(Start=bold_open.pop(), End=i + curr_index - count)
                     style_range.Font.Bold = True
                 elif tag == '<\\u>' and underline_open:
                     style_range = doc.Range(Start=underline_open.pop(), End=i + curr_index - count)
@@ -98,7 +95,16 @@ def make_suggestions(doc, new_text):
     try:
         original_text = doc.Content.Text.strip()
         new_text = clean_llm_text(new_text)
-        changes = diff(original_text, new_text, counts_only=False, as_patch=False)
+        changes = list(difflib.ndiff(original_text.split(" "), new_text.split(" ")))
+        for i in range(len(changes)):
+            changes[i] = [changes[i][0], changes[i][2:]]
+            if changes[i][1] not in TAGS:
+                changes[i][1] += " "
+        
+        if changes:
+            changes[-1][1] = changes[-1][1].strip()
+            if changes[-1][0] == "+" or changes[-1][0] == "-":
+                changes[-2][1] = changes[-2][1].strip()
         print(changes)
 
         # Review mode 
@@ -132,7 +138,7 @@ def make_suggestions(doc, new_text):
 
                 index += len(content)
             
-            elif operation == "=":
+            elif operation == " ":
                 index += len(content)
 
         # Save
@@ -148,5 +154,5 @@ def make_suggestions(doc, new_text):
 # testing
 path = r"C:\Users\zroy1\Downloads\ScripterTest.docx"
 doc = get_doc(path)
-make_suggestions(doc=doc, new_text="A <b><u>quick<\\u> brown dog<\\b> leaps over the lazy fox.")
+make_suggestions(doc=doc, new_text="A <b> <u> quick <\\u> brown dog <\\b> leaps over the lazy fox.")
 get_text(doc=doc)
